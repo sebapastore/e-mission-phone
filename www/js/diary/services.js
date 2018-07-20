@@ -3,7 +3,7 @@
 angular.module('emission.main.diary.services', ['emission.plugin.logger',
     'emission.services', 'emission.main.common.services',
     'emission.incident.posttrip.manual'])
-.factory('DiaryHelper', function(Timeline, CommonGraph, PostTripManualMarker, $ionicActionSheet){
+.factory('DiaryHelper', function(Timeline, CommonGraph, PostTripManualMarker, $ionicActionSheet, EditModeFactory){
   var dh = {};
   // dh.expandEarlierOrLater = function(id) {
   //   document.querySelector('#hidden-' + id.toString()).setAttribute('style', 'display: block;');
@@ -102,7 +102,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
     }
   }
   dh.isDraft = function(tripgj) {
-    if (tripgj.data.features.length == 3 && 
+    if (tripgj.data.features.length == 3 &&
       tripgj.data.features[2].features[0].properties.feature_type == "section" &&
       tripgj.data.features[2].features[0].properties.sensed_mode == "MotionTypes.UNPROCESSED") {
         return true;
@@ -313,7 +313,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
       case "stop": layer.bindPopup(""+feature.properties.duration); break;
       case "start_place": layer.bindPopup(""+feature.properties.displayName); break;
       case "end_place": layer.bindPopup(""+feature.properties.displayName); break;
-      case "section": layer.on('click', () => {editMode(feature, layer)}); break;
+      case "section": layer.on('click', EditModeFactory.editMode(feature, layer)); break;
       case "incident": PostTripManualMarker.displayIncident(feature, layer); break;
     }
   };
@@ -401,26 +401,34 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
                 weight: 5,
                 opacity: 1,
         };
-        var mode_string = dh.getHumanReadable(feature.properties.sensed_mode);
-        switch(mode_string) {
-            case "WALKING": return getColoredStyle(baseDict, 'brown');
-            case "RUNNING": return getColoredStyle(baseDict, 'brown');
-            case "BICYCLING": return getColoredStyle(baseDict, 'green');
-            case "IN_VEHICLE": return getColoredStyle(baseDict, 'purple');
-            case "TRAIN": return getColoredStyle(baseDict, 'skyblue');
-            case "BUS": return getColoredStyle(baseDict, 'navy');
-            case "CAR": return getColoredStyle(baseDict, 'salmon');
-            case "UNKNOWN": return getColoredStyle(baseDict, 'orange');
-            case "UNPROCESSED": return getColoredStyle(baseDict, 'orange');
-            case "AIR_OR_HSR": return getColoredStyle(baseDict, 'red');
-            default: return getColoredStyle(baseDict, 'black');
+        if('mode_confirm' in feature.properties) {
+          var mode_string = feature.properties.mode_confirm.value;
+          switch(mode_string) {
+              case "walk": return getColoredStyle(baseDict, 'brown');
+              case "bike": return getColoredStyle(baseDict, 'green');
+              case "drove_alone": return getColoredStyle(baseDict, 'purple');
+              case "shared_ride": return getColoredStyle(baseDict, 'purple');
+              case "taxi": return getColoredStyle(baseDict, 'purple');
+              case "bus": return getColoredStyle(baseDict, 'purple');
+              case "train": return getColoredStyle(baseDict, 'purple');
+              case "free_shuttle": return getColoredStyle(baseDict, 'purple');
+              case "other_mode": return getColoredStyle(baseDict, 'orange');
+              default: return getColoredStyle(baseDict, 'black');
+          }
+        } else {
+          var mode_string = dh.getHumanReadable(feature.properties.sensed_mode);
+          switch(mode_string) {
+              case "WALKING": return getColoredStyle(baseDict, 'brown');
+              case "RUNNING": return getColoredStyle(baseDict, 'brown');
+              case "BICYCLING": return getColoredStyle(baseDict, 'green');
+              case "IN_VEHICLE": return getColoredStyle(baseDict, 'purple');
+              case "UNKNOWN": return getColoredStyle(baseDict, 'orange');
+              case "UNPROCESSED": return getColoredStyle(baseDict, 'orange');
+              case "AIR_OR_HSR": return getColoredStyle(baseDict, 'red');
+              default: return getColoredStyle(baseDict, 'black');
+          }
         }
       };
-
-    var editMode = function(feature, layer) {
-      layer.bindPopup(""+dh.getHumanReadable(feature.properties.sensed_mode));
-      console.log("EDIT MODE SHEET!!!")
-    }
 
   return dh;
 
@@ -514,12 +522,12 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
      * (e.g. `T_DATA_PUSHED`), while the remote transitions have an integer
      * (e.g. `2`).
      * See https://github.com/e-mission/e-mission-phone/issues/214#issuecomment-286338606
-     * 
+     *
      * Also, at least on iOS, it is possible for trip end to be detected way
      * after the end of the trip, so the trip end transition of a processed
      * trip may actually show up as an unprocessed transition.
      * See https://github.com/e-mission/e-mission-phone/issues/214#issuecomment-286279163
-     * 
+     *
      * Let's abstract this out into our own minor state machine.
      */
     var transition2Trip = function(transitionList) {
@@ -528,8 +536,8 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
         var currStartTransitionIndex = -1;
         var currEndTransitionIndex = -1;
         var processedUntil = 0;
-       
-        while(processedUntil < transitionList.length) { 
+
+        while(processedUntil < transitionList.length) {
           // Logger.log("searching within list = "+JSON.stringify(transitionList.slice(processedUntil)));
           if(inTrip == false) {
               var foundStartTransitionIndex = transitionList.slice(processedUntil).findIndex(isStartingTransition);
@@ -554,7 +562,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
                   Logger.log("currEndTransitionIndex = "+currEndTransitionIndex);
                   Logger.log("Unprocessed trip starting at "+JSON.stringify(transitionList[currStartTransitionIndex])+" ends at "+JSON.stringify(transitionList[currEndTransitionIndex]));
                   tripList.push([transitionList[currStartTransitionIndex],
-                                 transitionList[currEndTransitionIndex]])  
+                                 transitionList[currEndTransitionIndex]])
                   inTrip = false;
               }
           }
@@ -577,7 +585,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
     var isEndingTransition = function(transWrapper) {
         // Logger.log("isEndingTransition: transWrapper.data.transition = "+transWrapper.data.transition);
         if(transWrapper.data.transition == 'T_TRIP_ENDED' ||
-            transWrapper.data.transition == 'local.transition.stopped_moving' || 
+            transWrapper.data.transition == 'local.transition.stopped_moving' ||
             transWrapper.data.transition == 2) {
             // Logger.log("Returning true");
             return true;
@@ -729,7 +737,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
          endTs: tripEndTransition.data.ts
       }
       Logger.log("About to pull location data for range "
-        + moment.unix(tripStartTransition.data.ts).toString() + " -> " 
+        + moment.unix(tripStartTransition.data.ts).toString() + " -> "
         + moment.unix(tripEndTransition.data.ts).toString());
       return UnifiedDataLoader.getUnifiedSensorDataForInterval("background/filtered_location", tq).then(function(locationList) {
           if (locationList.length == 0) {
@@ -737,7 +745,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
           }
           var sortedLocationList = locationList.sort(tsEntrySort);
           var retainInRange = function(loc) {
-            return (tripStartTransition.data.ts <= loc.data.ts) && 
+            return (tripStartTransition.data.ts <= loc.data.ts) &&
                     (loc.data.ts <= tripEndTransition.data.ts)
           }
 
@@ -800,15 +808,15 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
        * from the last processed trip until the end of the day. But now we
        * need to figure out which timezone we need to use for the end of the
        * day.
-       * 
+       *
        * I think that it should be fine to use the current timezone.
-       * 
+       *
        * Details: https://github.com/e-mission/e-mission-phone/issues/214#issuecomment-284284382
        * One problem with simply querying for transactions after this is
        * that sometimes we skip trips in the cleaning phase because they are
        * spurious. So if we have already processed this day but had a
        * spurious trip after the last real trip, it would show up again.
-       * 
+       *
        * We deal with this by ensuring that this is called iff we are beyond
        * the end of the processed data.
        *
@@ -856,7 +864,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
                 // to one another is fairly simple, but we need to link the
                 // first unprocessed trip to the last processed trip.
                 // This might be challenging if we don't have any processed
-                // trips for the day. I don't want to go back forever until 
+                // trips for the day. I don't want to go back forever until
                 // I find a trip. So if this is the first trip, we will start a
                 // new chain for now, since this is with unprocessed data
                 // anyway.
@@ -1106,3 +1114,90 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
     return timeline;
   })
 
+  .factory('EditModeFactory', function($window, $state, $ionicActionSheet,
+                                          Logger, Timeline, PostTripManualMarker) {
+
+  var edm = {}
+  edm.chosenModeAndSection = []
+  var MODE_CONFIRM_KEY = "manual/mode_confirm";
+
+  var addModeToSectionDisplay = function(modeObj, section, layer) {
+      //Get trip from cache here?
+      //feature.properties.mode_confirm = modeObj;
+      var trip = Timeline.getTrip(section.properties.trip_id.$oid);
+      trip.features.forEach(function(feature) {
+        if(feature.type == "FeatureCollection") {
+          if(feature.features[0].id == section.id) feature.features[0].properties.mode_confirm = modeObj;
+        }
+      })
+      console.log(trip);
+  }
+
+  var modeOptions = [
+     {text:'Walk', value:'walk'},
+     {text:'Bike',value:'bike'},
+     {text:'Drove Alone',value:'drove_alone'},
+     {text:'Shared Ride',value:'shared_ride'},
+     {text:'Taxi/Uber/Lyft',value:'taxi'},
+     {text:'Bus',value:'bus'},
+     {text:'Train',value:'train'},
+     {text:'Free Shuttle',value:'free_shuttle'},
+     {text:'Other',value:'other_mode'}];
+
+    var toModeTextArray = function(modeOptions) {
+      var modeTextArray = modeOptions.map(function(item) { return {text: item["text"]} });
+      modeTextArray.push( {text:"Cancel"});
+      return modeTextArray;
+    }
+
+     var modeTextToValue = function(modeText, feature) {
+      var modeObjReturn = {}
+      var trip = Timeline.getTrip(feature.properties.trip_id.$oid);
+      modeOptions.forEach(function (modeObj) {
+        if(modeText == "Other") modeObjReturn = {text:'Other',value:'other_mode'} //Change this to have users own mode value
+        else if(modeObj.text == modeText) modeObjReturn = modeObj;
+      });
+      modeObjReturn.tripId = feature.properties.trip_id.$oid;
+      modeObjReturn.id = feature.id;
+      modeObjReturn.ts = new Date().getTime();
+      return modeObjReturn;
+    }
+
+    var addModeToSection = function(modeText, feature, layer) {
+      var modeObj = modeTextToValue(modeText, feature);
+      $window.cordova.plugins.BEMUserCache.putMessage(MODE_CONFIRM_KEY, modeObj).then(function() {
+        console.log(modeObj);
+        addModeToSectionDisplay(modeObj, feature, layer);
+      });
+    }
+
+    edm.editMode = function(feature, layer) {
+      //layer.bindPopup(""+dh.getHumanReadable(feature.properties.sensed_mode));
+      return function(e) {
+        console.log("Edit mode sheet")
+        incidentOrModeSheet(feature, layer)
+      }
+    }
+
+    var incidentOrModeSheet = function(feature, layer) {
+      Logger.log("About to show sheet to edit section mode");
+      var modesText = toModeTextArray(modeOptions)
+
+      Logger.log("About to call ionicActionSheet.show");
+      $ionicActionSheet.show({titleText: "Edit Mode",
+            cancel: function() {
+              Logger.log("Canceled incident or edit trip");
+            },
+            buttons: modesText,
+            buttonClicked: function(index, button) {
+                Logger.log("Clicked button "+button.text+" at index "+index);
+                if (button.text != "Cancel") {
+                  Logger.log("Choose " + button.text);
+                  addModeToSection(button.text, feature, layer)
+                }
+                return true;
+            }
+      })
+    };
+    return edm;
+})
