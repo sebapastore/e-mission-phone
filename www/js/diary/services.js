@@ -375,7 +375,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
   };
 
   var onEachFeatureForEditMode = function(feature, layer) {
-    console.log("onEachFeature called with "+JSON.stringify(feature));
+    // console.log("onEachFeature called with "+JSON.stringify(feature));
     switch(feature.properties.feature_type) {
       case "stop": layer.bindPopup(""+feature.properties.duration); break;
       case "start_place": layer.bindPopup(""+feature.properties.displayName); break;
@@ -453,7 +453,7 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
   return dh;
 
 })
-.factory('Timeline', function(CommHelper, $http, $ionicLoading, $window,
+.factory('Timeline', function(CommHelper, $http, $ionicLoading, $window, $ionicPopup,
     $rootScope, CommonGraph, UnifiedDataLoader, Logger) {
   var timeline = {};
     // corresponds to the old $scope.data. Contains all state for the current
@@ -781,15 +781,8 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
             return undefined;
           }
           var sortedLocationList = locationList.sort(tsEntrySort);
-          var retainInRange = function(loc) {
-            return (tripStartTransition.data.ts <= loc.data.ts) &&
-                    (loc.data.ts <= tripEndTransition.data.ts)
-          }
-
-          var filteredLocationList = sortedLocationList.filter(retainInRange);
-
-          var tripStartPoint = filteredLocationList[0];
-          var tripEndPoint = filteredLocationList[filteredLocationList.length-1];
+          var tripStartPoint = sortedLocationList[0];
+          var tripEndPoint = sortedLocationList[sortedLocationList.length-1];
           Logger.log("tripStartPoint = "+JSON.stringify(tripStartPoint)+"tripEndPoint = "+JSON.stringify(tripEndPoint));
           var features = [
             place2Geojson(trip, tripStartPoint, startPlacePropertyFiller),
@@ -1243,8 +1236,10 @@ angular.module('emission.main.diary.services', ['emission.plugin.logger',
       if(modeSoFarList.length > 0) {
         modeSoFarList.forEach(function(mode) {
           $window.cordova.plugins.BEMUserCache.putMessage(MODE_CONFIRM_KEY, mode).then(function() {
+            console.log("BEFORE addModeToSectionDisplay:" + trip.sections.length)
             addModeToSectionDisplay(mode, trip);
-          }).then(function(trip) {
+            console.log("AFTER addModeToSectionDisplay:" + trip.sections.length)
+          }).then(function() {
             var sectionsSource = trip.features.map(function(section){
               var aSectionsSource;
               if(section.type == "FeatureCollection"){
